@@ -26,8 +26,8 @@ import java.util.UUID;
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    /*private final WebClient.Builder webClientBuilder;
-    private final ObservationRegistry observationRegistry;*/
+    private final WebClient.Builder webClient;
+    /*private final ObservationRegistry observationRegistry;*/
     private final ApplicationEventPublisher applicationEventPublisher;
 
     public String placeOrder(OrderRequest orderRequest) {
@@ -50,19 +50,27 @@ public class OrderService {
         /*Observation inventoryServiceObservation = Observation.createNotStarted("inventory-service-lookup",
                 this.observationRegistry);
         inventoryServiceObservation.lowCardinalityKeyValue("call", "inventory-service");
-        return inventoryServiceObservation.observe(() -> {
-            InventoryResponse[] inventoryResponseArray = webClientBuilder.build().get()
-                    .uri("http://inventory-service/api/inventory",
-                            uriBuilder -> uriBuilder.queryParam("skuCode", skuCodes).build())
-                    .retrieve()
-                    .bodyToMono(InventoryResponse[].class)
-                    .block();
 
-            boolean allProductsInStock = Arrays.stream(inventoryResponseArray)
-                    .allMatch(InventoryResponse::isInStock);*/
+        return inventoryServiceObservation.observe(() -> {*/
 
-        orderRepository.save(order);
-        return "Order Placed";
+        InventoryResponse[] inventoryResponseArray = webClient.build().get()
+                .uri("http://inventory-service/api/inventory",
+                        uriBuilder -> uriBuilder.queryParam("skuCodes", skuCodes).build())
+                .retrieve()
+                .bodyToMono(InventoryResponse[].class)
+                .block();
+
+        boolean allProductsInStock = Arrays.stream(inventoryResponseArray)
+                .allMatch(InventoryResponse::isInStock);
+
+        if (!allProductsInStock || inventoryResponseArray.length == 0) {
+            List<String> notAvailableProducts = Arrays.stream(inventoryResponseArray)
+                .filter(inventory -> !inventory.isInStock()).map(InventoryResponse::getSkuCode).toList();
+            return String.format("Products %s are not in stock.", notAvailableProducts.toArray());
+        }else {
+            orderRepository.save(order);
+            return "Order Placed";
+        }
     }
 
     private OrderItem mapToDto(OrderItemsDto orderLineItemsDto) {
